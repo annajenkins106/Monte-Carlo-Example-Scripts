@@ -1,0 +1,61 @@
+montecarlo:
+
+field_health:
+- table: demo_env:raw.zuora_invoice
+  timestamp_field: invoice_created_ts
+  lookback_days: 1
+  aggregation_time_interval: hour
+  schedule:
+    type: fixed
+    interval_minutes: 720
+    start_time: '2023-08-31T18:23:37.229000+00:00'
+    timezone: UTC
+  description: Field Health for all fields in [Snowflake] demo_env:staging.salesforce_account
+  notify_rule_run_failure: false
+  use_important_fields: false
+  use_partition_clause: false
+
+custom_sql:
+- description: 'Invoices with start dates after end dates in raw.zuora_invoice.'
+  notes: 'The following invoice IDs do not have properly formed start/end dates: {{query_result:id}}'
+  severity: SEV-4
+  notify_rule_run_failure: true
+  schedule:
+    type: fixed
+    interval_minutes: 1440
+    start_time: '2023-08-31T18:23:37.229000+00:00'
+    timezone: UTC
+  event_rollup_until_changed: true
+  sql: |
+    SELECT *
+    FROM DEMO_ENV.raw.zuora_invoice
+    WHERE invoice_period_start_date > invoice_period_end_date
+    AND DATEDIFF(day, invoice_created_ts::DATE, CURRENT_DATE()::DATE) <= 1
+  comparisons:
+  - type: threshold
+    operator: GT
+    threshold_value: 0.0
+  sampling_sql: "SELECT\n\tCASE WHEN (invoice_period_start_date - invoice_period_end_date < 10) THEN '0 to 10'\n    \tWHEN  (invoice_period_start_date - invoice_period_end_date < 20) THEN '11 to 20'\n    \tWHEN  (invoice_period_start_date - invoice_period_end_date < 30) THEN '21 to 30'\n    \tWHEN  (invoice_period_start_date - invoice_period_end_date < 40) THEN '31 to 40'\n    \tELSE '41+ ' END AS Date_difference_buckets\n, Count(*)\nFROM DEMO_ENV.staging.zuora_invoice\nWHERE invoice_period_start_date > invoice_period_end_date\nAND DATEDIFF(day, invoice_created_ts::DATE, CURRENT_DATE()::DATE) <= 1\nGROUP BY 1\n"
+
+field_quality:
+- description: '% unique < 100% for id field in raw.zuora_invoice table'
+  notify_rule_run_failure: false
+  schedule:
+    type: fixed
+    interval_minutes: 720
+    start_time: '2023-08-31T18:23:37.229000+00:00'
+    timezone: UTC
+  event_rollup_until_changed: false
+  tables:
+  - demo_env:raw.zuora_invoice
+  fields:
+  - invoice_quantity
+  metric_type: ZERO_RATE
+  comparisons:
+  - type: threshold
+    operator: GT
+    threshold_value: 0.0
+  filters:
+  - field: invoice_created_ts
+    operator: GT
+    value: '24'
